@@ -733,6 +733,8 @@
       const dtSource = 1 / Math.max(80 * f, 1);
       const dtNum = Math.min(dtStable, dtSource);
 
+      // Analytical-mode sample arrays: voltage and current phasors along the line.
+      // These are built only for the analytic solver and then stored in state.V/state.I.
       const V = [];
       const I = [];
 
