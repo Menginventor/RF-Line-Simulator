@@ -1,17 +1,20 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RF Transmission Line Simulator</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <main>
     <aside>
       <h1>RF Line Simulator</h1>
       <p class="byline">by E26BYK</p>
-      <p class="sub">Lossless <code>Z0 = 50 ohm</code> transmission line with analytical and Yee-grid RK4 numerical modes.</p>
+      <p class="sub">Lossless <code>Z0 = 50 ohm</code> transmission line with analytical and Yee-grid RK4 numerical
+        modes.</p>
 
       <section class="group">
         <p class="group-title">Solver</p>
@@ -51,24 +54,7 @@
         </label>
       </section>
 
-      <section class="group">
-        <p class="group-title">Transmission Line</p>
-        <p class="subtle"><code>Z0 = 50 ohm</code></p>
-        <label>
-          Velocity factor
-          <div class="row">
-            <input id="vfRange" type="range" min="0.3" max="1" step="0.01" value="0.66">
-            <input id="vf" type="number" min="0.3" max="1" step="0.01" value="0.66">
-          </div>
-        </label>
-        <label>
-          Line length (lambda)
-          <div class="row">
-            <input id="lenRange" type="range" min="0.05" max="5" step="0.05" value="1">
-            <input id="lenLambda" type="number" min="0.05" max="20" step="0.05" value="1">
-          </div>
-        </label>
-      </section>
+
 
       <section class="group">
         <p class="group-title">Load</p>
@@ -92,11 +78,26 @@
           </div>
         </label>
       </section>
+            <section class="group">
+        <p class="group-title">Transmission Line</p>
+        <p class="subtle"><code>Z0 = 50 ohm</code></p>
+        <label>
+          Velocity factor
+          <div class="row">
+            <input id="vfRange" type="range" min="0.3" max="1" step="0.01" value="0.66">
+            <input id="vf" type="number" min="0.3" max="1" step="0.01" value="0.66">
+          </div>
+        </label>
+        <label>
+          Line length (lambda)
+          <div class="row">
+            <input id="lenRange" type="range" min="0.05" max="5" step="0.05" value="1">
+            <input id="lenLambda" type="number" min="0.05" max="20" step="0.05" value="1">
+          </div>
+        </label>
+      </section>
 
-      <input id="amp" type="hidden" value="1">
-      <input id="ampRange" type="hidden" value="1">
-      <input id="speed" type="hidden" value="1">
-      <input id="speedRange" type="hidden" value="1">
+
     </aside>
 
     <section class="stage">
@@ -138,7 +139,7 @@
 
     const ids = [
       "elements", "f0", "f0Range", "f", "fRange", "vf", "vfRange", "rLoad", "rRange",
-      "lenLambda", "lenRange", "xLoad", "xRange", "amp", "ampRange", "speed", "speedRange"
+      "lenLambda", "lenRange", "xLoad", "xRange", 
     ];
     const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
     const canvas = document.getElementById("plot");
@@ -217,8 +218,8 @@
     bindPair("lenLambda", "lenRange");
     bindPair("rLoad", "rRange", { resetOnChange: false });
     bindPair("xLoad", "xRange", { resetOnChange: false });
-    bindPair("amp", "ampRange", { resetOnChange: false });
-    bindPair("speed", "speedRange", { resetOnChange: false });
+
+
 
     function allocateNumericalArrays(count) {
       N = count;
@@ -350,85 +351,306 @@
     }
 
     function updateModel() {
+      // =========================================================
+      // Common Parameters
+      // =========================================================
       const f0 = Number(el.f0.value) * 1e6;
       const f = Number(el.f.value) * 1e6;
+
       const vf = Number(el.vf.value);
       const lenLambda = Number(el.lenLambda.value);
+
       const vp = C0 * vf;
       const length = lenLambda * vp / f0;
+
       const dz = length / N;
+
       const beta = TWO_PI * f / vp;
       const omega = TWO_PI * f;
-      const amp = Number(el.amp.value);
+
+      const amp = 1; // use constant amplitude for now.
+
       const rawRLoad = Number(el.rLoad.value);
-      const zLoad = c(rawRLoad, Number(el.xLoad.value));
-      const isNumericShort = state.mode === "numeric" && rawRLoad <= 0 && Number(el.xLoad.value) === 0;
-      const rLoad = isNumericShort ? 0 : Math.max(0.05, rawRLoad);
       const xLoad = Number(el.xLoad.value);
-      const gamma = div(sub(zLoad, c(Z0)), add(zLoad, c(Z0)));
-      const effectiveLoad = state.mode === "analytic" ? zLoad : c(rLoad, xLoad);
-      const gammaReadout = div(sub(effectiveLoad, c(Z0)), add(effectiveLoad, c(Z0)));
-      const gammaMag = Math.min(abs(gammaReadout), 0.999999);
-      const lPerM = Z0 / vp;
-      const cPerM = 1 / (Z0 * vp);
-      const lCell = lPerM * dz;
-      const cCell = cPerM * dz;
-      const rs = Z0;
-      const loadL = xLoad > 0 ? xLoad / omega : 0;
-      const loadC = xLoad < 0 ? -1 / (omega * xLoad) : 0;
-      const dtLine = 0.28 * dz / vp;
-      const dtLoadR = isNumericShort ? Infinity : 0.18 * rLoad * cCell;
-      const dtLoadL = loadL > 0 ? 0.18 * Math.sqrt(loadL * cCell) : Infinity;
-      const dtLoadC = loadC > 0 ? 0.18 * Math.sqrt(lCell * loadC) : Infinity;
-      const dtStable = Math.min(dtLine, dtLoadR, dtLoadL, dtLoadC);
-      const dtSource = 1 / Math.max(80 * f, 1);
-      const dtNum = Math.min(dtStable, dtSource);
 
-      // Analytical-mode sample arrays: voltage and current phasors along the line.
-      // These are built only for the analytic solver and then stored in state.V/state.I.
-      const V = [];
-      const I = [];
+      const zLoad = c(rawRLoad, xLoad);
 
+      // Reflection coefficient (ideal load)
+      const gamma = div(
+        sub(zLoad, c(Z0)),
+        add(zLoad, c(Z0))
+      );
+
+      // =========================================================
+      // Analytical Mode
+      // =========================================================
       if (state.mode === "analytic") {
+
+        // -----------------------------------------
+        // Reflection / VSWR
+        // -----------------------------------------
+        const gammaMag = Math.min(abs(gamma), 0.999999);
+
+        const vswr =
+          gammaMag >= 0.999
+            ? Infinity
+            : (1 + gammaMag) / (1 - gammaMag);
+
+        // -----------------------------------------
+        // Analytical Voltage / Current Solution
+        // -----------------------------------------
+        const V = [];
+        const I = [];
+
         const Vplus = c(amp / 2, 0);
-        const analyticPoints = 401;
+
+        const analyticPoints = 401; // pre define the number of points to sample the analytical solution for consistent display and performance. Must be odd to include the endpoint.
+
+
+        // sample the line at a number of points to get the voltage and current distribution
         for (let k = 0; k < analyticPoints; k++) {
-          const z = length * k / (analyticPoints - 1);
-          const forward = mul(Vplus, expj(-beta * z));
-          const reflectedAtSourceFactor = mul(gamma, expj(-2 * beta * length));
-          const reflected = mul(mul(Vplus, reflectedAtSourceFactor), expj(beta * z));
+
+          const samplePos = length * k / (analyticPoints - 1);
+
+          // Forward wave
+          const forward = mul(
+            Vplus,
+            expj(-beta * samplePos)
+          );
+
+          // Reflection seen from source
+          const reflectedAtSourceFactor = mul(
+            gamma,
+            expj(-2 * beta * length)
+          );
+
+          // Reflected wave
+          const reflected = mul(
+            mul(Vplus, reflectedAtSourceFactor),
+            expj(beta * samplePos)
+          );
+
+          // Total voltage/current
           const vk = add(forward, reflected);
-          const ik = div(sub(forward, reflected), c(Z0));
+
+          const ik = div(
+            sub(forward, reflected),
+            c(Z0)
+          );
+
           V.push(vk);
           I.push(ik);
         }
+
+        // -----------------------------------------
+        // Readouts
+        // -----------------------------------------
+        const elecDeg = 360 * lenLambda * f / f0;
+
+        readouts.length.textContent =
+          `${length.toPrecision(4)} m`;
+
+        readouts.elec.textContent =
+          `${elecDeg.toFixed(1)} deg`;
+
+        readouts.gamma.textContent =
+          gammaMag.toFixed(3);
+
+        readouts.vswr.textContent =
+          Number.isFinite(vswr)
+            ? vswr.toFixed(2)
+            : "infinite";
+
+        readouts.model.textContent =
+          `Analytical phasor, length ${lenLambda.toFixed(2)} lambda0, ` +
+          `load ${formatOhms(zLoad)}, ` +
+          `f/f0 = ${(f / f0).toFixed(3)}`;
+
+        // -----------------------------------------
+        // Store State
+        // -----------------------------------------
+        state.V = V;
+        state.I = I;
+
+        state.params = {
+          omega,
+          f,
+          f0,
+          length,
+          dz,
+          gammaMag,
+          amp
+        };
+
+        draw();
+        return;
       }
 
+      // =========================================================
+      // Numerical Mode
+      // =========================================================
+
+      // -----------------------------------------
+      // Numerical Load Handling
+      // -----------------------------------------
+      const isNumericShort =
+        rawRLoad <= 0 && xLoad === 0;
+
+      const rLoad =
+        isNumericShort
+          ? 0
+          : Math.max(0.05, rawRLoad);
+
+      const effectiveLoad = c(rLoad, xLoad);
+
+      // Reflection coefficient used for display
+      const gammaReadout = div(
+        sub(effectiveLoad, c(Z0)),
+        add(effectiveLoad, c(Z0))
+      );
+
+      const gammaMag = Math.min(
+        abs(gammaReadout),
+        0.999999
+      );
+
+      const vswr =
+        gammaMag >= 0.999
+          ? Infinity
+          : (1 + gammaMag) / (1 - gammaMag);
+
+      // -----------------------------------------
+      // Distributed Line Parameters
+      // -----------------------------------------
+      const lPerM = Z0 / vp;
+      const cPerM = 1 / (Z0 * vp);
+
+      const lCell = lPerM * dz;
+      const cCell = cPerM * dz;
+
+      const rs = Z0;
+
+      // -----------------------------------------
+      // Reactive Load Model
+      // -----------------------------------------
+      const loadL =
+        xLoad > 0
+          ? xLoad / omega
+          : 0;
+
+      const loadC =
+        xLoad < 0
+          ? -1 / (omega * xLoad)
+          : 0;
+
+      // -----------------------------------------
+      // Stability Constraints
+      // -----------------------------------------
+      const dtLine =
+        0.28 * dz / vp;
+
+      const dtLoadR =
+        isNumericShort
+          ? Infinity
+          : 0.18 * rLoad * cCell;
+
+      const dtLoadL =
+        loadL > 0
+          ? 0.18 * Math.sqrt(loadL * cCell)
+          : Infinity;
+
+      const dtLoadC =
+        loadC > 0
+          ? 0.18 * Math.sqrt(lCell * loadC)
+          : Infinity;
+
+      const dtStable = Math.min(
+        dtLine,
+        dtLoadR,
+        dtLoadL,
+        dtLoadC
+      );
+
+      const dtSource =
+        1 / Math.max(80 * f, 1);
+
+      const dtNum = Math.min(
+        dtStable,
+        dtSource
+      );
+
+      // -----------------------------------------
+      // Readouts
+      // -----------------------------------------
       const elecDeg = 360 * lenLambda * f / f0;
-      const vswr = gammaMag >= 0.999 ? Infinity : (1 + gammaMag) / (1 - gammaMag);
-      readouts.length.textContent = `${length.toPrecision(4)} m`;
-      readouts.elec.textContent = `${elecDeg.toFixed(1)} deg`;
-      readouts.gamma.textContent = gammaMag.toFixed(3);
-      readouts.vswr.textContent = Number.isFinite(vswr) ? vswr.toFixed(2) : "infinite";
-      if (state.mode === "analytic") {
-        readouts.model.textContent = `Analytical phasor, length ${lenLambda.toFixed(2)} lambda0, load ${formatOhms(zLoad)}, f/f0 = ${(f / f0).toFixed(3)}`;
-      } else {
-        const xNote = xLoad > 0 ? `, series L = ${loadL.toExponential(3)} H` : xLoad < 0 ? `, series C = ${loadC.toExponential(3)} F` : "";
-        const loadText = isNumericShort ? "short boundary" : `Rload = ${rLoad.toPrecision(4)} ohm${xNote}`;
-        readouts.model.textContent = `Yee-grid RK4, ${N + 1} voltage nodes, ${N} current edges, length ${lenLambda.toFixed(2)} lambda0, Rs = 50 ohm, ${loadText}`;
-      }
 
-      state.V = V;
-      state.I = I;
-      state.params = { omega, f, f0, length, dz, gammaMag, amp, rLoad, xLoad, loadL, loadC, lCell, cCell, rs, dtNum, isNumericShort };
+      readouts.length.textContent =
+        `${length.toPrecision(4)} m`;
+
+      readouts.elec.textContent =
+        `${elecDeg.toFixed(1)} deg`;
+
+      readouts.gamma.textContent =
+        gammaMag.toFixed(3);
+
+      readouts.vswr.textContent =
+        Number.isFinite(vswr)
+          ? vswr.toFixed(2)
+          : "infinite";
+
+      const xNote =
+        xLoad > 0
+          ? `, series L = ${loadL.toExponential(3)} H`
+          : xLoad < 0
+            ? `, series C = ${loadC.toExponential(3)} F`
+            : "";
+
+      const loadText =
+        isNumericShort
+          ? "short boundary"
+          : `Rload = ${rLoad.toPrecision(4)} ohm${xNote}`;
+
+      readouts.model.textContent =
+        `Yee-grid RK4, ` +
+        `${N + 1} voltage nodes, ` +
+        `${N} current edges, ` +
+        `length ${lenLambda.toFixed(2)} lambda0, ` +
+        `Rs = 50 ohm, ` +
+        `${loadText}`;
+
+      // -----------------------------------------
+      // Store State
+      // -----------------------------------------
+      // These variable is not use as we using numerical arrays, but we clear it for consistency and to avoid confusion.
+      state.V = [];
+      state.I = [];
+
+      state.params = {
+        omega,
+        f,
+        f0,
+        length,
+        dz,
+        gammaMag,
+        amp,
+        rLoad,
+        xLoad,
+        loadL,
+        loadC,
+        lCell,
+        cCell,
+        rs,
+        dtNum,
+        isNumericShort
+      };
+
       draw();
     }
-
     function resetNumerical() {
       state.numV.fill(0);
       state.numI.fill(0);
       state.numLoad = 0;
-      state.numericScale = Math.max(0.001, Number(el.amp.value));
+      state.numericScale = 1;
       state.simTime = 0;
       state.t = 0;
     }
@@ -542,7 +764,7 @@
     }
 
     function advanceNumerical(realDt) {
-      const visualCyclesPerSecond = Number(el.speed.value);
+      const visualCyclesPerSecond = 1;
       const targetAdvance = realDt * visualCyclesPerSecond / state.params.f;
       const maxAdvance = 4 / state.params.f;
       let remaining = Math.min(targetAdvance, maxAdvance);
@@ -699,7 +921,7 @@
 
       const maxV = Math.max(0.001, ...panels.flatMap((panel) => panel.voltage.map(abs)));
       const maxIZ = Math.max(0.001, ...panels.flatMap((panel) => panel.currentZ.map(abs)));
-      let scale = Math.max(maxV, maxIZ, Number(el.amp.value), 0.001);
+      let scale = Math.max(maxV, maxIZ, 1, 0.001);
       if (state.mode === "numeric") {
         state.numericScale = Math.max(state.numericScale * 0.998, scale);
         scale = state.numericScale;
@@ -724,7 +946,7 @@
       state.lastFrame = now;
       if (!state.paused) {
         if (state.mode === "analytic") {
-          const visualCyclesPerSecond = Number(el.speed.value);
+          const visualCyclesPerSecond = 1;
           state.t += dt * visualCyclesPerSecond / state.params.f;
         } else {
           advanceNumerical(dt);
@@ -743,4 +965,5 @@
     requestAnimationFrame(animate);
   </script>
 </body>
+
 </html>
