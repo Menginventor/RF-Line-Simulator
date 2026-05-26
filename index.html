@@ -11,7 +11,7 @@
 <body>
   <main>
     <aside>
-      <h1>RF Line Simulator</h1>
+      <h1>RF Transmission Line Simulator</h1>
       <p class="byline">by E26BYK</p>
       <p class="sub">Lossless <code>Z0 = 50 ohm</code> transmission line with analytical and Yee-grid RK4 numerical
         modes.</p>
@@ -133,6 +133,9 @@
 
   <script>
     const Z0 = 50;
+    const RS = Z0; // Source resistance, set equal to Z0 for maximum power transfer and to simplify the source voltage calculation in numerical mode.
+    const sourceAmp = 1; // use constant amplitude for now. 
+
     let N = 200;
     const C0 = 299792458; //Speed of light in vacuum in m/s
     const TWO_PI = Math.PI * 2;
@@ -368,7 +371,7 @@
       const beta = TWO_PI * f / vp;
       const omega = TWO_PI * f;
 
-      const amp = 1; // use constant amplitude for now.
+      const sourceAmp = 1; // use constant amplitude for now.
 
       const rawRLoad = Number(el.rLoad.value);
       const xLoad = Number(el.xLoad.value);
@@ -402,7 +405,12 @@
         const V = [];
         const I = [];
 
-        const Vplus = c(amp / 2, 0);
+        //const Vplus = c(sourceAmp / 2, 0);
+        const Vplus = mul(
+          c(sourceAmp, 0),
+          c(Z0 / (RS + Z0), 0)
+        );
+
 
         const analyticPoints = 401; // pre define the number of points to sample the analytical solution for consistent display and performance. Must be odd to include the endpoint.
 
@@ -479,7 +487,7 @@
           length,
           dz,
           gammaMag,
-          amp
+          sourceAmp
         };
 
         draw();
@@ -632,7 +640,7 @@
         length,
         dz,
         gammaMag,
-        amp,
+        sourceAmp,
         rLoad,
         xLoad,
         loadL,

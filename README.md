@@ -1,4 +1,4 @@
-# RF Line Simulator
+# RF Transmission Line Simulator
 
 A browser-based RF transmission line simulator implemented as a single-page static HTML app.
 
